@@ -1,6 +1,10 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
-import 'widgets.dart';
+import '../widgets.dart';
 
 enum ApplicationLoginState {
   loggedOut,
@@ -10,149 +14,95 @@ enum ApplicationLoginState {
   loggedIn,
 }
 
-class Authentication extends StatelessWidget {
-  const Authentication({
-    required this.loginState,
-    required this.email,
-    required this.startLoginFlow,
-    required this.verifyEmail,
-    required this.signInWithEmailAndPassword,
-    required this.cancelRegistration,
-    required this.registerAccount,
-    required this.signOut,
-  });
-
-  final ApplicationLoginState loginState;
-  final String? email;
-  final void Function() startLoginFlow;
-  final void Function(
-    String email,
-    void Function(Exception e) error,
-  ) verifyEmail;
-  final void Function(
-    String email,
-    String password,
-    void Function(Exception e) error,
-  ) signInWithEmailAndPassword;
-  final void Function() cancelRegistration;
-  final void Function(
-    String email,
-    String displayName,
-    String password,
-    void Function(Exception e) error,
-  ) registerAccount;
-  final void Function() signOut;
-
-  @override
-  Widget build(BuildContext context) {
-    switch (loginState) {
-      case ApplicationLoginState.loggedOut:
-        return Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 24, bottom: 8),
-              child: StyledButton(
-                onPressed: () {
-                  startLoginFlow();
-                },
-                child: const Text('RSVP'),
-              ),
-            ),
-          ],
-        );
-      case ApplicationLoginState.emailAddress:
-        return EmailForm(
-            callback: (email) => verifyEmail(
-                email, (e) => _showErrorDialog(context, 'Invalid email', e)));
-      case ApplicationLoginState.password:
-        return PasswordForm(
-          email: email!,
-          login: (email, password) {
-            signInWithEmailAndPassword(email, password,
-                (e) => _showErrorDialog(context, 'Failed to sign in', e));
-          },
-        );
-      case ApplicationLoginState.register:
-        return RegisterForm(
-          email: email!,
-          cancel: () {
-            cancelRegistration();
-          },
-          registerAccount: (
-            email,
-            displayName,
-            password,
-          ) {
-            registerAccount(
-                email,
-                displayName,
-                password,
-                (e) =>
-                    _showErrorDialog(context, 'Failed to create account', e));
-          },
-        );
-      case ApplicationLoginState.loggedIn:
-        return Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 24, bottom: 8),
-              child: StyledButton(
-                onPressed: () {
-                  signOut();
-                },
-                child: const Text('LOGOUT'),
-              ),
-            ),
-          ],
-        );
-      default:
-        return Row(
-          children: const [
-            Text("Internal error, this shouldn't happen..."),
-          ],
-        );
+class ApplicationState extends ChangeNotifier {
+  ApplicationState(bool isLoggedIn) {
+    if (isLoggedIn) {
+      _loginState = ApplicationLoginState.loggedIn;
+    } else {
+      _loginState = ApplicationLoginState.loggedOut;
     }
   }
 
-  void _showErrorDialog(BuildContext context, String title, Exception e) {
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(
-            title,
-            style: const TextStyle(fontSize: 24),
-          ),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: <Widget>[
-                Text(
-                  '${(e as dynamic).message}',
-                  style: const TextStyle(fontSize: 18),
-                ),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            StyledButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text(
-                'OK',
-                style: TextStyle(color: Colors.deepPurple),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+  ApplicationLoginState _loginState = ApplicationLoginState.loggedOut;
+
+  ApplicationLoginState get loginState => _loginState;
+
+  String? _email;
+
+  String? get email => _email;
+
+  void startLoginFlow() {
+    _loginState = ApplicationLoginState.emailAddress;
+    notifyListeners();
+  }
+
+  Future<void> verifyEmail(
+    String email,
+    void Function(FirebaseAuthException e) errorCallback,
+  ) async {
+    try {
+      var methods =
+          await FirebaseAuth.instance.fetchSignInMethodsForEmail(email);
+      if (methods.contains('password')) {
+        _loginState = ApplicationLoginState.password;
+      } else {
+        _loginState = ApplicationLoginState.register;
+      }
+      _email = email;
+      notifyListeners();
+    } on FirebaseAuthException catch (e) {
+      errorCallback(e);
+    }
+  }
+
+  Future<bool> signInWithEmailAndPassword(
+    String email,
+    String password,
+    void Function(FirebaseAuthException e) errorCallback,
+  ) async {
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return true;
+    } on FirebaseAuthException catch (e) {
+      errorCallback(e);
+      return false;
+    }
+  }
+
+  void cancelRegistration() {
+    _loginState = ApplicationLoginState.emailAddress;
+    notifyListeners();
+  }
+
+  Future<bool> registerAccount(
+      String email,
+      String displayName,
+      String password,
+      void Function(FirebaseAuthException e) errorCallback) async {
+    try {
+      var credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
+      await credential.user!.updateDisplayName(displayName);
+      return true;
+    } on FirebaseAuthException catch (e) {
+      errorCallback(e);
+      return false;
+    }
+  }
+
+  void signOut() {
+    FirebaseAuth.instance.signOut();
   }
 }
 
 class EmailForm extends StatefulWidget {
   const EmailForm({required this.callback});
+
   final void Function(String email) callback;
+
   @override
   _EmailFormState createState() => _EmailFormState();
 }
@@ -220,10 +170,12 @@ class RegisterForm extends StatefulWidget {
     required this.cancel,
     required this.email,
   });
+
   final String email;
   final void Function(String email, String displayName, String password)
       registerAccount;
   final void Function() cancel;
+
   @override
   _RegisterFormState createState() => _RegisterFormState();
 }
@@ -338,8 +290,10 @@ class PasswordForm extends StatefulWidget {
     required this.login,
     required this.email,
   });
+
   final String email;
   final void Function(String email, String password) login;
+
   @override
   _PasswordFormState createState() => _PasswordFormState();
 }
