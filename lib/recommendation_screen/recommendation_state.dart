@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -7,6 +9,17 @@ class RecommendationState extends ChangeNotifier {
   List<DocumentSnapshot> documentSnapshotList = [];
   List<DocumentSnapshot> favouritesSnapshotList = [];
   List<DocumentSnapshot> categoriesSnapshotList = [];
+
+  Map<int, bool> saveMap = HashMap();
+
+  String? _latestSearchQuery;
+
+  String? get latestSearchQuery => _latestSearchQuery;
+
+  set latestSearchQuery(String? latestSearchQuery) {
+    _latestSearchQuery = latestSearchQuery;
+    notifyListeners();
+  }
 
   RecommendationState() {
     init();
@@ -29,6 +42,7 @@ class RecommendationState extends ChangeNotifier {
                  .get()
                  .then((querySnapshot) {
                 documentSnapshotList.addAll(querySnapshot.docs);
+                notifyListeners();
                 //documentSnapshotList.first.get("image");
         });
       });
@@ -45,13 +59,23 @@ class RecommendationState extends ChangeNotifier {
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     uid = "Karan_g";
     if (uid != null && favouritesSnapshotList.isEmpty) {
-      Future<List<String>> future = FirebaseFirestore.instance.collection("users/$uid/favourites")
+       FirebaseFirestore.instance.collection("users/$uid/favourites")
           .get().then((querySnapshot) {
         favouritesSnapshotList.addAll(querySnapshot.docs);
         favouritesSnapshotList.sort((a, b) =>
-            a.get("name").toUpperCase().toString().compareTo(b.get("name").toUpperCase().toString()));
+            a.get("dishName").toUpperCase().toString().compareTo(b.get("dishName").toUpperCase().toString()));
+        notifyListeners();
+        return querySnapshot.docs.map((documentSnapshot) {
+          return documentSnapshot.get("image") as String;
+        }).toList();
       });
     }
+    FirebaseFirestore.instance.collection("users/$uid/favourites").snapshots()
+        .listen((querySnapshot) {
+      favouritesSnapshotList = querySnapshot.docs;
+      favouritesSnapshotList.sort((a, b) =>
+          a.get("dishName").toUpperCase().toString().compareTo(b.get("dishName").toUpperCase().toString()));
+    });
   }
 
   void paginate() {
@@ -66,7 +90,7 @@ class RecommendationState extends ChangeNotifier {
     });
   }
 
-  querySearchSuggestionList(String searchQuery) {
+  Future<List<String>> querySearchSuggestionList(String searchQuery) {
     searchQuery = searchQuery.toLowerCase();
     List<String> searchList = [];
     List<String> snapshotMatchedList = [];
@@ -80,7 +104,7 @@ class RecommendationState extends ChangeNotifier {
         .get()
         .then((querySnapshot) {
       List<String> categorySuggestions = [];
-      for (int index = 0; index <= categoriesSnapshotList.length; index++) {
+      for (int index = 0; index < categoriesSnapshotList.length; index++) {
         String categoryName = categoriesSnapshotList.elementAt(index).get("categoryName");
         categoryName = categoryName.toLowerCase();
         if (categoryName.startsWith(searchQuery)) {
@@ -88,7 +112,7 @@ class RecommendationState extends ChangeNotifier {
           break;
         }
       }
-      querySnapshot.docs.map((documentSnapshot) {
+      for (var documentSnapshot in querySnapshot.docs) {
         String name = documentSnapshot.get("name") as String;
         name = name.toLowerCase();
         if (categorySuggestions.isNotEmpty && searchList.isEmpty) {
@@ -101,17 +125,27 @@ class RecommendationState extends ChangeNotifier {
         } else {
           snapshotUnMatchedList.add(name);
         }
-      });
+      }
         searchList.addAll(snapshotMatchedList);
         searchList.addAll(snapshotContainsList);
         searchList.addAll(snapshotUnMatchedList);
+        return Future.value(searchList);
       //   documentSnapshotList.addAll(querySnapshot.docs);
       //documentSnapshotList.first.get("image");
     });
   }
 
-  querySearchResultList(String searchQuery) {
-    searchQuery = searchQuery.toLowerCase();
+  Future<List<String>> querySearchResultList() {
+    List<String> dishImageList = [];
+    dishImageList.add("");
+    dishImageList.add("");
+    if (latestSearchQuery == null) {
+      dishImageList.addAll(documentSnapshotList.map((documentSnapshot) {
+        return documentSnapshot.get("img") as String;
+      }).toList());
+      return Future.value(dishImageList);
+    }
+    latestSearchQuery = latestSearchQuery!.toLowerCase();
     List<DocumentSnapshot> modifiedList = [];
     List<DocumentSnapshot> snapshotMatchedList = [];
     List<DocumentSnapshot> snapshotContainsList = [];
@@ -120,7 +154,7 @@ class RecommendationState extends ChangeNotifier {
         .collection("recipes")
         .where(
           "nameAsArray",
-          arrayContains: searchQuery.toLowerCase(),
+          arrayContains: latestSearchQuery!.toLowerCase(),
         )
         .get()
         .then((querySnapshot) {
@@ -128,7 +162,7 @@ class RecommendationState extends ChangeNotifier {
           for (int index = 0; index <= categoriesSnapshotList.length; index++) {
            String categoryName = categoriesSnapshotList.elementAt(index).get("categoryName");
            categoryName = categoryName.toLowerCase();
-           if (categoryName == searchQuery) {
+           if (categoryName == latestSearchQuery) {
              categorySuggestion = categoryName;
              break;
            }
@@ -143,9 +177,9 @@ class RecommendationState extends ChangeNotifier {
           if (categoryName == categorySuggestion) {
             modifiedList.add(documentSnapshot);
           }
-        } else if (name.startsWith(searchQuery)) {
+        } else if (name.startsWith(latestSearchQuery!)) {
           snapshotMatchedList.add(documentSnapshot);
-        } else if (name.contains(searchQuery)) {
+        } else if (name.contains(latestSearchQuery!)) {
           snapshotContainsList.add(documentSnapshot);
         } else {
           snapshotUnMatchedList.add(documentSnapshot);
@@ -156,8 +190,16 @@ class RecommendationState extends ChangeNotifier {
         modifiedList.addAll(snapshotContainsList);
         modifiedList.addAll(snapshotUnMatchedList);
       }
-      //   documentSnapshotList.addAll(querySnapshot.docs);
-      //documentSnapshotList.first.get("image");
+      dishImageList.addAll(modifiedList.map((documentSnapshot) {
+        return documentSnapshot.get("img") as String;
+      }).toList());
+      return Future.value(dishImageList);
     });
+  }
+
+  saveDish(int index) {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    uid = "Karan_g";
+      favouritesFuture = FirebaseFirestore.instance.collection("users/$uid/favourites").
   }
 }
