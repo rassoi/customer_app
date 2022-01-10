@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:rassoi/recipe_screen/recipe_widget.dart';
 import 'package:rassoi/recommendation_screen/recommendation_state.dart';
 import 'package:rassoi/recommendation_screen/recommendation_widget.dart';
 import 'package:rassoi/upcoming_meal.dart';
@@ -20,7 +19,11 @@ void main() async {
   /**
    * Recommendation Page
    */
-  runApp(RecommendationPage());
+  runApp(ChangeNotifierProvider<RecommendationState>(
+    create: (_) => RecommendationState(),
+      child: RecommendationPage()
+  )
+  );
 
   /**
    * Recipe Screen

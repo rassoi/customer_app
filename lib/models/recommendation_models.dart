@@ -8,19 +8,23 @@ class RecommendationModel {
   bool isSearchBar;
   get gatIsSearchBar => isSearchBar;
 
+  bool isStartOfAllResults;
+
   DocumentSnapshot? get documentSnapshot => _documentSnapshot;
 
-  final bool _isFavourites;
+  bool _isFavourites;
   bool get isFavourite => _isFavourites;
+  set isFavourite(bool isFavourite) {
+    _isFavourites = isFavourite;
+  }
 
-
-  RecommendationModel(this._documentSnapshot, this._isFavourites, {this.isSearchBar = false});
+  RecommendationModel(this._documentSnapshot, this._isFavourites, {this.isSearchBar = false, this.isStartOfAllResults = false});
 
   String getDishImageUrl() {
-    return _documentSnapshot?.get("img") as String;
+    return _documentSnapshot?.get(isFavourite ? "image" : "img") as String;
   }
 
   String getDishName() {
-    return _documentSnapshot?.get("name") as String;
+    return _documentSnapshot?.get(isFavourite ? "dishName" : "name") as String;
   }
 }

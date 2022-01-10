@@ -3,23 +3,18 @@ import 'dart:collection';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:rassoi/models/recommendation_models.dart';
 
 class RecommendationState extends ChangeNotifier {
-  List<DocumentSnapshot> documentSnapshotList = [];
-  List<DocumentSnapshot> favouritesSnapshotList = [];
-  List<DocumentSnapshot> categoriesSnapshotList = [];
-
-  Map<int, bool> saveMap = HashMap();
-
-  String? _latestSearchQuery;
-
-  String? get latestSearchQuery => _latestSearchQuery;
-
-  set latestSearchQuery(String? latestSearchQuery) {
-    _latestSearchQuery = latestSearchQuery;
-    notifyListeners();
-  }
+  List<DocumentSnapshot>? fetchedCategoriesSnapshotList;
+  List<DocumentSnapshot>? fetchedFavouritesSnapshotList;
+  List<DocumentSnapshot>? fetchedDishesSnapshotList;
+  Map<String, DocumentSnapshot?> nameFavouritesMap = HashMap();
+  bool shouldShowLoader = true;
+  bool noInternet = false;
+  
+  String? currentSearchedQuery;
 
   RecommendationState() {
     init();
@@ -28,178 +23,286 @@ class RecommendationState extends ChangeNotifier {
   void init() async {
     WidgetsFlutterBinding.ensureInitialized();
     await Firebase.initializeApp();
-    // Fetching 1st ten meals
-      FirebaseFirestore.instance
-          .collection("recipes")
-          .limit(1)
-          .get()
-          .then((querySnapshot) {
-              documentSnapshotList.add(querySnapshot.docs.last);
-              FirebaseFirestore.instance
-                 .collection("recipes")
-                 .startAfterDocument(documentSnapshotList.last)
-                 .limit(9)
-                 .get()
-                 .then((querySnapshot) {
-                documentSnapshotList.addAll(querySnapshot.docs);
-                notifyListeners();
-                //documentSnapshotList.first.get("image");
-        });
-      });
-      //    .then((value) => documentSnapshotList.forEach((querySnapshot) {}));
-    if (categoriesSnapshotList.isEmpty) {
-      FirebaseFirestore.instance
-          .collection("categories")
-          .get()
-          .then((querySnapshot) {
-          categoriesSnapshotList.addAll(querySnapshot.docs);
-      });
-    }
-    
+    // Fetch Categories
+    FirebaseFirestore.instance
+        .collection("categories")
+        .get()
+        .then((querySnapshot) {
+      fetchedCategoriesSnapshotList = [];
+      fetchedCategoriesSnapshotList!.addAll(querySnapshot.docs);
+      loadInitialResults();
+    }).onError((error, stackTrace) {
+      showErrorScreen();
+    });
+
+    // Fetch Favorites
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     uid = "Karan_g";
-    if (uid != null && favouritesSnapshotList.isEmpty) {
-       FirebaseFirestore.instance.collection("users/$uid/favourites")
-          .get().then((querySnapshot) {
-        favouritesSnapshotList.addAll(querySnapshot.docs);
-        favouritesSnapshotList.sort((a, b) =>
-            a.get("dishName").toUpperCase().toString().compareTo(b.get("dishName").toUpperCase().toString()));
-        notifyListeners();
-        return querySnapshot.docs.map((documentSnapshot) {
-          return documentSnapshot.get("image") as String;
-        }).toList();
-      });
-    }
-    FirebaseFirestore.instance.collection("users/$uid/favourites").snapshots()
-        .listen((querySnapshot) {
-      favouritesSnapshotList = querySnapshot.docs;
-      favouritesSnapshotList.sort((a, b) =>
-          a.get("dishName").toUpperCase().toString().compareTo(b.get("dishName").toUpperCase().toString()));
-    });
-  }
+    FirebaseFirestore.instance
+        .collection("users/$uid/favourites")
+        .get()
+        .then((querySnapshot) {
+      fetchedFavouritesSnapshotList = [];
+      fetchedFavouritesSnapshotList!.addAll(querySnapshot.docs);
+      fetchedFavouritesSnapshotList!.sort((a, b) => (a.get("dishName") as String)
+          .toLowerCase()
+          .toString()
+          .compareTo((b.get("dishName") as String).toLowerCase().toString()));
+      for (var favouriteDocument in querySnapshot.docs) {
+        String dishName = favouriteDocument.get("dishName");
+        nameFavouritesMap[dishName.toLowerCase()] = favouriteDocument;
+      }
+      loadInitialResults();
+    }).onError((error, stackTrace) {
+      showErrorScreen();
+    });;
 
-  void paginate() {
+    // Fetch Dishes
     FirebaseFirestore.instance
         .collection("recipes")
-        .startAfterDocument(documentSnapshotList.last)
-        .limit(9)
         .get()
         .then((querySnapshot) {
-      documentSnapshotList.addAll(querySnapshot.docs);
-      //documentSnapshotList.first.get("image");
+      fetchedDishesSnapshotList = [];
+      fetchedDishesSnapshotList!.addAll(querySnapshot.docs);
+      fetchedFavouritesSnapshotList!.sort((a, b) => (a.get("name") as String)
+          .toLowerCase()
+          .toString()
+          .compareTo((b.get("name") as String).toLowerCase().toString()));
+      loadInitialResults();
+    }).onError((error, stackTrace) {
+      showErrorScreen();
     });
   }
 
-  Future<List<String>> querySearchSuggestionList(String searchQuery) {
-    searchQuery = searchQuery.toLowerCase();
-    List<String> searchList = [];
-    List<String> snapshotMatchedList = [];
-    List<String> snapshotContainsList = [];
-    List<String> snapshotUnMatchedList = [];
-    return FirebaseFirestore.instance
-        .collection("recipes")
-        .where(
-      "nameAsArray",
-      arrayContains: searchQuery)
-        .get()
-        .then((querySnapshot) {
-      List<String> categorySuggestions = [];
-      for (int index = 0; index < categoriesSnapshotList.length; index++) {
-        String categoryName = categoriesSnapshotList.elementAt(index).get("categoryName");
-        categoryName = categoryName.toLowerCase();
-        if (categoryName.startsWith(searchQuery)) {
-          categorySuggestions.add(categoryName);
-          break;
-        }
-      }
-      for (var documentSnapshot in querySnapshot.docs) {
-        String name = documentSnapshot.get("name") as String;
-        name = name.toLowerCase();
-        if (categorySuggestions.isNotEmpty && searchList.isEmpty) {
-            searchList.addAll(categorySuggestions);
-        }
-        if (name.startsWith(searchQuery)) {
-          snapshotMatchedList.add(name);
-        } else if (name.contains(searchQuery)) {
-          snapshotContainsList.add(name);
-        } else {
-          snapshotUnMatchedList.add(name);
-        }
-      }
-        searchList.addAll(snapshotMatchedList);
-        searchList.addAll(snapshotContainsList);
-        searchList.addAll(snapshotUnMatchedList);
-        return Future.value(searchList);
-      //   documentSnapshotList.addAll(querySnapshot.docs);
-      //documentSnapshotList.first.get("image");
-    });
-  }
-
-  Future<List<String>> querySearchResultList() {
-    List<String> dishImageList = [];
-    dishImageList.add("");
-    dishImageList.add("");
-    if (latestSearchQuery == null) {
-      dishImageList.addAll(documentSnapshotList.map((documentSnapshot) {
-        return documentSnapshot.get("img") as String;
-      }).toList());
-      return Future.value(dishImageList);
+  List<RecommendationModel> getFavourites() {
+    if (fetchedFavouritesSnapshotList == null) {
+      return [];
     }
-    latestSearchQuery = latestSearchQuery!.toLowerCase();
-    List<DocumentSnapshot> modifiedList = [];
-    List<DocumentSnapshot> snapshotMatchedList = [];
-    List<DocumentSnapshot> snapshotContainsList = [];
-    List<DocumentSnapshot> snapshotUnMatchedList = [];
-    return FirebaseFirestore.instance
-        .collection("recipes")
-        .where(
-          "nameAsArray",
-          arrayContains: latestSearchQuery!.toLowerCase(),
-        )
-        .get()
-        .then((querySnapshot) {
-          String? categorySuggestion;
-          for (int index = 0; index <= categoriesSnapshotList.length; index++) {
-           String categoryName = categoriesSnapshotList.elementAt(index).get("categoryName");
-           categoryName = categoryName.toLowerCase();
-           if (categoryName == latestSearchQuery) {
-             categorySuggestion = categoryName;
-             break;
-           }
-          }
-      querySnapshot.docs.map((documentSnapshot) {
-        String name = documentSnapshot.get("name") as String;
-        name = name.toLowerCase();
-        String categoryName = documentSnapshot.get("categoryName") as String;
-        categoryName = categoryName.toLowerCase();
-
-        if (categorySuggestion != null) {
-          if (categoryName == categorySuggestion) {
-            modifiedList.add(documentSnapshot);
-          }
-        } else if (name.startsWith(latestSearchQuery!)) {
-          snapshotMatchedList.add(documentSnapshot);
-        } else if (name.contains(latestSearchQuery!)) {
-          snapshotContainsList.add(documentSnapshot);
-        } else {
-          snapshotUnMatchedList.add(documentSnapshot);
-        }
-      });
-      if (categorySuggestion == null) {
-        modifiedList.addAll(snapshotMatchedList);
-        modifiedList.addAll(snapshotContainsList);
-        modifiedList.addAll(snapshotUnMatchedList);
+    List<RecommendationModel> finalList = [];
+    if (currentSearchedQuery == null) {
+       for (var documentSnapshot in fetchedFavouritesSnapshotList!) {
+         String dishName = documentSnapshot.get("dishName");
+         if (nameFavouritesMap[dishName] != null) {
+           finalList.add(RecommendationModel(documentSnapshot, true));
+         }
       }
-      dishImageList.addAll(modifiedList.map((documentSnapshot) {
-        return documentSnapshot.get("img") as String;
-      }).toList());
-      return Future.value(dishImageList);
-    });
+    } else {
+      List<RecommendationModel> matchList = [];
+      List<RecommendationModel> startsWithList = [];
+      List<RecommendationModel> containsList = [];
+      List<RecommendationModel> noMatchList = [];
+      for (var favouriteDocument in fetchedFavouritesSnapshotList!) {
+        String dishName = favouriteDocument.get("dishName") as String;
+        if (nameFavouritesMap[dishName] == null) {
+            continue;
+        }
+        if (dishName == currentSearchedQuery!) {
+          matchList.add(RecommendationModel(favouriteDocument, true));
+        } else if (dishName.startsWith(currentSearchedQuery!)) {
+          startsWithList.add(RecommendationModel(favouriteDocument, true));
+        } else if (dishName.contains(currentSearchedQuery!)) {
+          containsList.add(RecommendationModel(favouriteDocument, true));
+        } else if (currentSearchedQuery != null) {
+          noMatchList.add(RecommendationModel(favouriteDocument, true));
+        }
+      }
+      finalList.addAll(matchList);
+      finalList.addAll(startsWithList);
+      finalList.addAll(containsList);
+      finalList.addAll(noMatchList);
+    }
+    return finalList;
   }
 
-  saveDish(int index) {
-    String? uid = FirebaseAuth.instance.currentUser?.uid;
-    uid = "Karan_g";
-      favouritesFuture = FirebaseFirestore.instance.collection("users/$uid/favourites").
+  List<String> getSuggestions(String? currentTypedQuery) {
+    if (fetchedCategoriesSnapshotList == null
+        || fetchedDishesSnapshotList == null
+        || currentTypedQuery == null
+        || currentTypedQuery.isEmpty) {
+      return ["Search all dishes"];
+    }
+    currentTypedQuery = currentTypedQuery.toLowerCase();
+    List<String> suggestionList = [];
+    List<String> matchedList = [];
+    List<String> startsWithList = [];
+    List<String> containsList = [];
+  //  List<String> unMatchedList = [];
+
+    List<String> categorySuggestions = [];
+    for (int index = 0; index < fetchedCategoriesSnapshotList!.length; index++) {
+      String categoryName = fetchedCategoriesSnapshotList!.elementAt(index).get("categoryName");
+      categoryName = categoryName.toLowerCase();
+      if (categoryName.startsWith(currentTypedQuery)) {
+        categorySuggestions.add(categoryName);
+        break;
+      }
+    }
+    for (var dishDocumentSnapshot in fetchedDishesSnapshotList!) {
+      String dishName = dishDocumentSnapshot.get("name") as String;
+      dishName = dishName.toLowerCase();
+      if (categorySuggestions.isNotEmpty && suggestionList.isEmpty && currentTypedQuery != null) {
+        suggestionList.addAll(categorySuggestions);
+      }
+      if (dishName == currentTypedQuery) {
+        matchedList.add(dishName);
+      } else if (dishName.startsWith(currentTypedQuery)) {
+        startsWithList.add(dishName);
+      } else if (dishName.contains(currentTypedQuery)) {
+        containsList.add(dishName);
+      }
+    }
+    suggestionList.addAll(matchedList);
+    suggestionList.addAll(startsWithList);
+    suggestionList.addAll(containsList);
+ //   searchList.addAll(unMatchedList);
+    return suggestionList.take(5).toList();
+  }
+
+  List<RecommendationModel> getAllResults() {
+    if (fetchedDishesSnapshotList == null) {
+      return [];
+    }
+    List<RecommendationModel> finalList = [];
+    if (nameFavouritesMap.isNotEmpty) {
+      finalList.add(RecommendationModel(null, true));
+    }
+    if (currentSearchedQuery == null || currentSearchedQuery == "Search all dishes") {
+      List<DocumentSnapshot> removedFavouritesList = [];
+      // 1a. Remove all favourites
+      for (var fetchedDishSnapshot in fetchedDishesSnapshotList!) {
+//        bool match = false;
+        String name = fetchedDishSnapshot.get("name") as String;
+        if (nameFavouritesMap[name.toLowerCase()] == null) {
+          removedFavouritesList.add(fetchedDishSnapshot);
+        }
+/*        for (var fetchedFavouriteSnapshot in fetchedFavouritesSnapshotList!) {
+          if (name.toLowerCase() == fetchedFavouriteSnapshot.get("dishName").toLowerCase()) {
+            match = true;
+            break;
+          }
+        }
+        if (!match) {
+          removedFavouritesList.add(fetchedDishSnapshot);
+        }*/
+      }
+      // 1b. sort alpha numerically
+      removedFavouritesList.sort((a, b) => a
+          .get("name")
+          .toLowerCase()
+          .toString()
+          .compareTo(b.get("name").toLowerCase().toString()));
+      for (int i = 0; i < removedFavouritesList.length; i++) {
+        finalList.add(
+            RecommendationModel(
+                removedFavouritesList[i],
+                false,
+                isStartOfAllResults: i == 0)
+        );
+      }
+      return finalList;
+    } else {
+      List<DocumentSnapshot> removedFavouritesList = [];
+      // 1a. Remove all favourites
+      for (var fetchedDishSnapshot in fetchedDishesSnapshotList!) {
+//        bool match = false;
+        String name = fetchedDishSnapshot.get("name") as String;
+        if (nameFavouritesMap[name.toLowerCase()] == null) {
+          removedFavouritesList.add(fetchedDishSnapshot);
+        }
+      }
+      // 1b. sort alpha numerically
+      removedFavouritesList.sort((a, b) => a
+          .get("name")
+          .toLowerCase()
+          .toString()
+          .compareTo(b.get("name").toLowerCase().toString()));
+
+      // 2a. If matchingCategory is non null, then user searched for that specific category
+      String? matchingCategory;
+      if (fetchedCategoriesSnapshotList != null && fetchedCategoriesSnapshotList!.isNotEmpty) {
+        for (int index = 0; index < fetchedCategoriesSnapshotList!.length; index++) {
+          String categoryName = fetchedCategoriesSnapshotList!.elementAt(index).get("categoryName");
+          categoryName = categoryName.toLowerCase();
+          if (currentSearchedQuery != null && categoryName.startsWith(currentSearchedQuery!)) {
+            matchingCategory = categoryName;
+            break;
+          }
+        }
+      }
+
+      // 2b. Show only those dishes which has the searched matchingCategory in its category list.
+      //     We sort the list alpha numerically before showing.
+      if (matchingCategory != null) {
+        List<RecommendationModel> queryMatchingCategoryDishList = [];
+        for (var document in removedFavouritesList) {
+          List<dynamic> categoryNameList = document.get("categoryName")
+              .map((categoryName) => (categoryName as String).toLowerCase())
+              .toList();
+          if (categoryNameList.contains(matchingCategory)) {
+            queryMatchingCategoryDishList
+                .add(RecommendationModel(document, false, isStartOfAllResults: queryMatchingCategoryDishList.isEmpty));
+          }
+        }
+        return queryMatchingCategoryDishList;
+      }
+
+      // 3
+      List<DocumentSnapshot> finalDishList = [];
+      List<DocumentSnapshot> dishMatchedList = [];
+      List<DocumentSnapshot> dishStartsWithList = [];
+      List<DocumentSnapshot> dishContainsList = [];
+      List<DocumentSnapshot> dishUnMatchedList = [];
+      for (var dishDocument in removedFavouritesList) {
+        String name = dishDocument.get("name") as String;
+        name = name.toLowerCase();
+
+        if (currentSearchedQuery != null && name == currentSearchedQuery!) {
+          dishMatchedList.add(dishDocument);
+        } else if (currentSearchedQuery != null &&
+            name.startsWith(currentSearchedQuery!)) {
+          dishStartsWithList.add(dishDocument);
+        } else if (currentSearchedQuery != null && name.contains(currentSearchedQuery!)) {
+          dishContainsList.add(dishDocument);
+        } else {
+          dishUnMatchedList.add(dishDocument);
+        }
+      }
+      finalDishList.addAll(dishMatchedList);
+      finalDishList.addAll(dishStartsWithList);
+      finalDishList.addAll(dishContainsList);
+      finalDishList.addAll(dishUnMatchedList);
+      for (int i = 0; i < finalDishList.length; i++) {
+        finalList.add(
+            RecommendationModel(
+              finalDishList[i],
+              false,
+              isStartOfAllResults: i == 0)
+        );
+      }
+      return finalList;
+    }
+  }
+
+  loadInitialResults() {
+    if (fetchedCategoriesSnapshotList == null
+        || fetchedFavouritesSnapshotList == null
+        || fetchedDishesSnapshotList == null) {
+      return;
+    }
+    noInternet = false;
+    shouldShowLoader = false;
+    notifyListeners();
+  }
+
+  void showErrorScreen() {
+    noInternet = true;
+    shouldShowLoader = false;
+    notifyListeners();
+  }
+
+  tryAgainTapped() {
+    noInternet = false;
+    shouldShowLoader = true;
+    init();
   }
 }
