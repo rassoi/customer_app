@@ -3,28 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:provider/provider.dart';
 import 'package:rassoi/models/recommendation_models.dart';
+import 'package:rassoi/recommendation_screen/recommendation_image_widget.dart';
 import 'package:rassoi/recommendation_screen/recommendation_state.dart';
 import 'package:transparent_image/transparent_image.dart';
 
+import '../home_screen/main.dart';
+
 class RecommendationPage extends StatelessWidget {
    RecommendationPage({Key? key}) : super(key: key);
-  Map<int, Color> color =
-  {
-    50:Color.fromRGBO(136,14,79, .1),
-    100:Color.fromRGBO(136,14,79, .2),
-    200:Color.fromRGBO(136,14,79, .3),
-    300:Color.fromRGBO(136,14,79, .4),
-    400:Color.fromRGBO(136,14,79, .5),
-    500:Color.fromRGBO(136,14,79, .6),
-    600:Color.fromRGBO(136,14,79, .7),
-    700:Color.fromRGBO(136,14,79, .8),
-    800:Color.fromRGBO(136,14,79, .9),
-    900:Color.fromRGBO(136,14,79, 1),
-  };
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      theme: ThemeData(primarySwatch: MaterialColor(0xffFFE9D2, color), primaryColor: const Color(0xffFFE9D2)),
+      theme: ThemeData(primarySwatch: MaterialColor(0xffFFE9D2, swatch), primaryColor: const Color(0xffFFE9D2)),
       title: "Recommendation Page",
       home: const RecommendationWidget("Recommendations"),
     );
@@ -63,7 +54,7 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
             children: [
               // SearchBar
               getSearchbarWidget(recoState),
-              getList(recoState),
+              getParentList(recoState),
             ],
           ),
         ));
@@ -115,7 +106,7 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
     );
   }
 
-  getList(RecommendationState recoState) {
+  getParentList(RecommendationState recoState) {
     List<RecommendationModel> allResults = recoState.getAllResults();
     return Expanded(
       child: ListView.separated(
@@ -143,50 +134,48 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
   getFavouritesWidget(RecommendationState recoState) {
     List<RecommendationModel> favouritesModels = recoState.getFavourites();
     return favouritesModels.isNotEmpty
-        ? SizedBox(
-            height: 150,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                    padding: EdgeInsets.fromLTRB(10, 25, 10, 25),
-                    child: Text("Favourites",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Color(0xffFF8816), decoration: null, decorationStyle: null))),
-                Expanded(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    scrollDirection: Axis.horizontal,
-                    itemCount: favouritesModels.length,
-                    separatorBuilder: (BuildContext context, int index) {
-                      return const SizedBox(
-                        height: 10,
-                        width: 10,
-                      );
-                    },
-                    itemBuilder: (BuildContext context, int index) {
-                      return getFavouritesWidgetByIndex(
-                          favouritesModels.elementAt(index), index);
-                    },
-                  ),
+        ? Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+                padding: EdgeInsets.fromLTRB(10, 25, 10, 25),
+                child: Text("Favourites",
+                    style: TextStyle(fontWeight: FontWeight.bold,
+                        fontSize: 17, color: Color(0xffFF8816),
+                        decoration: null,
+                        decorationStyle: null)
                 )
-              ],
             ),
-          )
+            Container(
+              height: 100,
+              padding: const EdgeInsets.only(left: 10, right: 10),
+              child: ListView.separated(
+                shrinkWrap: true,
+                scrollDirection: Axis.horizontal,
+                itemCount: favouritesModels.length,
+                separatorBuilder: (BuildContext context, int index) {
+                  return const SizedBox(
+                    height: 10,
+                    width: 10,
+                  );
+                },
+                itemBuilder: (BuildContext context, int index) {
+                  return getFavouritesWidgetByIndex(
+                      favouritesModels.elementAt(index), recoState, index);
+                },
+              ),
+            )
+          ],
+        )
         : const SizedBox.shrink();
   }
 
-  Widget getFavouritesWidgetByIndex(RecommendationModel favouriteRecoModel, int index) {
+  Widget getFavouritesWidgetByIndex(RecommendationModel favouriteRecoModel, RecommendationState recoState, int index) {
     String image = favouriteRecoModel.getDishImageUrl();
     return Container(
       color: Colors.black12,
-      height: 100,
-      child: FadeInImage.memoryNetwork(
         width: 100,
-        height: 100,
-        placeholder: kTransparentImage,
-        fit: BoxFit.cover,
-        image: image,
-      ),
+        child: RecommendationImageWidget(image, recoState, favouriteRecoModel, 100, 100)
     );
   }
 
@@ -205,7 +194,7 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
         Container(
           color: Colors.black12,
           height: 200,
-          child: getResultImageWidget(context, image, recoState, resultModel),
+          child: RecommendationImageWidget(image, recoState, resultModel, 200, 0),
         )
       ],
     );
@@ -213,6 +202,7 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
 
   getResultImageWidget(BuildContext context, String image,
       RecommendationState recoState, RecommendationModel dishModel) {
+    return RecommendationImageWidget(image, recoState, dishModel, 200, 0);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -223,12 +213,12 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
           fit: BoxFit.cover,
           image: image,
         ),
-       getFavouritesIconWidget(dishModel)
+       getFavouritesIconWidget(recoState, dishModel)
       ],
     );
   }
 
-  getFavouritesIconWidget(RecommendationModel dishModel) {
+  getFavouritesIconWidget(RecommendationState recoState, RecommendationModel dishModel) {
     return  Align(
       alignment: Alignment.topRight,
       child: Container(
@@ -246,17 +236,20 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
             splashColor:  Colors.pink,
             focusColor: Colors.pink,
             onPressed: () {
-/*              dishModel.isFavourite = !dishModel.isFavourite;
-                  setState(() {});
-                  recoState
+              dishModel.isFavourite = !dishModel.isFavourite;
+              setState(() {});
+              recoState
                       .toggleFavouriteForDish(dishModel)
                       .then((success) {
                     if (!success) {
                       dishModel.isFavourite = !dishModel.isFavourite;
                       setState(() {});
                       // Show message something went wrong
+                      showSnackBar(context, "Something went wrong");
+                    } else {
+                      showSnackBar(context, dishModel.getDishName() + " saved to favourites");
                     }
-                  });*/
+                  });
             },
           ),
         ),

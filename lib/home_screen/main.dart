@@ -5,25 +5,28 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:rassoi/recommendation_screen/recommendation_state.dart';
-import 'package:rassoi/recommendation_screen/recommendation_widget.dart';
-import 'package:rassoi/upcoming_meal.dart';
+import 'package:rassoi/home_screen/upcoming_meal.dart';
+import 'package:rassoi/upcoming_meals_screen/upcoming_meals.dart';
 import 'package:transparent_image/transparent_image.dart';
 
-import 'food_categories.dart';
-import 'login_screen/authentication.dart';
-import 'login_screen/login_widget.dart';
+import '../food_categories.dart';
+import '../login_screen/authentication.dart';
+import '../login_screen/login_widget.dart';
 
 void main() async {
 
   /**
+   * Upcoming meals page
+   */
+  runApp(UpcomingMealsPage());
+  /**
    * Recommendation Page
    */
-  runApp(ChangeNotifierProvider<RecommendationState>(
+/*  runApp(ChangeNotifierProvider<RecommendationState>(
     create: (_) => RecommendationState(),
       child: RecommendationPage()
   )
-  );
+  );*/
 
   /**
    * Recipe Screen
@@ -40,6 +43,20 @@ void main() async {
    */
 //  isLoggedIn();
 }
+
+Map<int, Color> swatch =
+{
+  50:Color.fromRGBO(136,14,79, .1),
+  100:Color.fromRGBO(136,14,79, .2),
+  200:Color.fromRGBO(136,14,79, .3),
+  300:Color.fromRGBO(136,14,79, .4),
+  400:Color.fromRGBO(136,14,79, .5),
+  500:Color.fromRGBO(136,14,79, .6),
+  600:Color.fromRGBO(136,14,79, .7),
+  700:Color.fromRGBO(136,14,79, .8),
+  800:Color.fromRGBO(136,14,79, .9),
+  900:Color.fromRGBO(136,14,79, 1),
+};
 
 FutureOr<void> isLoggedIn() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -277,4 +294,11 @@ class HomeWidget extends StatelessWidget {
     await Firebase.initializeApp();
     return FirebaseFirestore.instance.collection("/categories/").get();
   }
+}
+
+showSnackBar(BuildContext context, String message, {secondsDuration = 3}) {
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text(message),
+    duration: Duration(seconds: secondsDuration),
+  ));
 }

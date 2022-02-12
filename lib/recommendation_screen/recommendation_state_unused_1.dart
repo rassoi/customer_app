@@ -64,7 +64,7 @@ class RecommendationState extends ChangeNotifier {
           .get().then((querySnapshot) {
         favouritesSnapshotList.addAll(querySnapshot.docs);
         favouritesSnapshotList.sort((a, b) =>
-            a.get("dishName").toUpperCase().toString().compareTo(b.get("dishName").toUpperCase().toString()));
+            a.get("name").toUpperCase().toString().compareTo(b.get("name").toUpperCase().toString()));
         notifyListeners();
         return querySnapshot.docs.map((documentSnapshot) {
           return documentSnapshot.get("image") as String;
@@ -75,7 +75,7 @@ class RecommendationState extends ChangeNotifier {
         .listen((querySnapshot) {
       favouritesSnapshotList = querySnapshot.docs;
       favouritesSnapshotList.sort((a, b) =>
-          a.get("dishName").toUpperCase().toString().compareTo(b.get("dishName").toUpperCase().toString()));
+          a.get("name").toUpperCase().toString().compareTo(b.get("name").toUpperCase().toString()));
     });
   }
 
@@ -142,7 +142,7 @@ class RecommendationState extends ChangeNotifier {
     dishImageList.add("");
     if (latestSearchQuery == null) {
       dishImageList.addAll(documentSnapshotList.map((documentSnapshot) {
-        return documentSnapshot.get("img") as String;
+        return documentSnapshot.get("image") as String;
       }).toList());
       return Future.value(dishImageList);
     }
@@ -192,7 +192,7 @@ class RecommendationState extends ChangeNotifier {
         modifiedList.addAll(snapshotUnMatchedList);
       }
       dishImageList.addAll(modifiedList.map((documentSnapshot) {
-        return documentSnapshot.get("img") as String;
+        return documentSnapshot.get("image") as String;
       }).toList());
       return Future.value(dishImageList);
     });

@@ -39,7 +39,7 @@ class RecommendationStateUnused2 extends ChangeNotifier {
         .listen((querySnapshot) {
 
       querySnapshot.docs.sort((a, b) =>
-          a.get("dishName").toUpperCase().toString().compareTo(b.get("dishName").toUpperCase().toString()));
+          a.get("name").toUpperCase().toString().compareTo(b.get("name").toUpperCase().toString()));
     });*/
   }
 
@@ -63,17 +63,17 @@ class RecommendationStateUnused2 extends ChangeNotifier {
     List<DocumentSnapshot> favouritesSnapshotList = [];
     favouritesSnapshotList.addAll(querySnapshot.docs);
     favouritesSnapshotList.sort((a, b) => a
-        .get("dishName")
+        .get("name")
         .toLowerCase()
         .toString()
-        .compareTo(b.get("dishName").toLowerCase().toString()));
+        .compareTo(b.get("name").toLowerCase().toString()));
     List<RecommendationModel> finalList = [];
     List<RecommendationModel> matchList = [];
     List<RecommendationModel> startsWithList = [];
     List<RecommendationModel> containsList = [];
     List<RecommendationModel> temporaryList = [];
     for (var favouriteDocument in favouritesSnapshotList) {
-      String dishName = favouriteDocument.get("dishName") as String;
+      String dishName = favouriteDocument.get("name") as String;
       if (_currentQuery != null && dishName == _currentQuery!) {
         matchList.add(RecommendationModel(favouriteDocument, true));
       } else if (_currentQuery != null && dishName.startsWith(_currentQuery!)) {
@@ -284,7 +284,7 @@ class RecommendationStateUnused2 extends ChangeNotifier {
     var documentReference = FirebaseFirestore.instance.collection("users/$uid/favourites/").doc(dishName);
     if (dishModel.isFavourite) {
      return documentReference.set({
-        'dishName': dishName,
+        'name': dishName,
         'image': dishModel.getDishImageUrl(),
       }).then((value) => true).onError((error, stackTrace) => false);
     } else {

@@ -21,10 +21,10 @@ class RecommendationModel {
   RecommendationModel(this._documentSnapshot, this._isFavourites, {this.isSearchBar = false, this.isStartOfAllResults = false});
 
   String getDishImageUrl() {
-    return _documentSnapshot?.get(isFavourite ? "image" : "img") as String;
+    return _documentSnapshot?.get("image") as String;
   }
 
   String getDishName() {
-    return _documentSnapshot?.get(isFavourite ? "dishName" : "name") as String;
+    return _documentSnapshot?.get("name") as String;
   }
 }

@@ -44,12 +44,12 @@ class RecommendationState extends ChangeNotifier {
         .then((querySnapshot) {
       fetchedFavouritesSnapshotList = [];
       fetchedFavouritesSnapshotList!.addAll(querySnapshot.docs);
-      fetchedFavouritesSnapshotList!.sort((a, b) => (a.get("dishName") as String)
+      fetchedFavouritesSnapshotList!.sort((a, b) => (a.get("name") as String)
           .toLowerCase()
           .toString()
-          .compareTo((b.get("dishName") as String).toLowerCase().toString()));
+          .compareTo((b.get("name") as String).toLowerCase().toString()));
       for (var favouriteDocument in querySnapshot.docs) {
-        String dishName = favouriteDocument.get("dishName");
+        String dishName = favouriteDocument.get("name");
         nameFavouritesMap[dishName.toLowerCase()] = favouriteDocument;
       }
       loadInitialResults();
@@ -81,7 +81,7 @@ class RecommendationState extends ChangeNotifier {
     List<RecommendationModel> finalList = [];
     if (currentSearchedQuery == null) {
        for (var documentSnapshot in fetchedFavouritesSnapshotList!) {
-         String dishName = documentSnapshot.get("dishName");
+         String dishName = documentSnapshot.get("name");
          if (nameFavouritesMap[dishName] != null) {
            finalList.add(RecommendationModel(documentSnapshot, true));
          }
@@ -92,7 +92,7 @@ class RecommendationState extends ChangeNotifier {
       List<RecommendationModel> containsList = [];
       List<RecommendationModel> noMatchList = [];
       for (var favouriteDocument in fetchedFavouritesSnapshotList!) {
-        String dishName = favouriteDocument.get("dishName") as String;
+        String dishName = favouriteDocument.get("name") as String;
         if (nameFavouritesMap[dishName] == null) {
             continue;
         }
@@ -176,7 +176,7 @@ class RecommendationState extends ChangeNotifier {
           removedFavouritesList.add(fetchedDishSnapshot);
         }
 /*        for (var fetchedFavouriteSnapshot in fetchedFavouritesSnapshotList!) {
-          if (name.toLowerCase() == fetchedFavouriteSnapshot.get("dishName").toLowerCase()) {
+          if (name.toLowerCase() == fetchedFavouriteSnapshot.get("name").toLowerCase()) {
             match = true;
             break;
           }
@@ -280,6 +280,33 @@ class RecommendationState extends ChangeNotifier {
         );
       }
       return finalList;
+    }
+  }
+
+  Future<bool> toggleFavouriteForDish(RecommendationModel dishModel) {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    uid = "Karan_g";
+    String dishName = dishModel.getDishName();
+    var documentReference = FirebaseFirestore.instance.collection("users/$uid/favourites/").doc(dishName);
+    if (dishModel.isFavourite) {
+      return documentReference.set({
+        'name': dishName,
+        'image': dishModel.getDishImageUrl(),
+      }).then((value) {
+        nameFavouritesMap[dishName] = dishModel.documentSnapshot;
+        return true;
+      }).onError((error, stackTrace) {
+        nameFavouritesMap[dishName] = null;
+        return false;
+      });
+    } else {
+      return documentReference.delete().then((value){
+        nameFavouritesMap[dishName] = null;
+        return true;
+      }).onError((error, stackTrace) {
+        nameFavouritesMap[dishName] = dishModel.documentSnapshot;
+        return false;
+      });
     }
   }
 
