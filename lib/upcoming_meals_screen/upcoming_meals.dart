@@ -33,9 +33,8 @@ class UpcomingMealsWidget extends StatelessWidget {
       ),
       body: ChangeNotifierProvider<PeopleCountCounterState>(
           create: (_) => PeopleCountCounterState(true),
-          child: GridHeader()
+          child: PeopleCountCounterWidget() // also use GridHeader()
       ),
     );
   }
-
 }
